@@ -89,6 +89,53 @@
   .warn-box .tip-text { font-size: 13px; color: #8a2010; line-height: 1.65; }
   .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
   .tag { background: var(--tag-bg); color: var(--accent2); font-size: 11px; padding: 3px 9px; border-radius: 12px; border: 1px solid var(--border); font-weight: 600; }
+
+  /* === Mobile Nav Bar (hidden on desktop) === */
+  .mobile-nav { display: none; background: var(--header-bg); border-top: 2px solid #1a4810; flex-shrink: 0; }
+  .mobile-nav-btn { flex: 1; padding: 8px 4px 6px; cursor: pointer; color: rgba(255,255,255,0.6); font-size: 10px; font-weight: 600; border: none; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px; border-top: 3px solid transparent; transition: all 0.15s; }
+  .mobile-nav-btn .nav-icon { font-size: 20px; }
+  .mobile-nav-btn.active { color: #a8e060; border-top-color: #a8e060; }
+
+  /* === Tablet (769–1100px): schmalere Spalten === */
+  @media (max-width: 1100px) {
+    .sidebar { width: 175px; }
+    .cmd-list { width: 175px; }
+    .detail { padding: 20px 22px; }
+    .detail-cmd { font-size: 28px; }
+  }
+
+  /* === Smartphone & kleines Tablet (≤768px): Ein-Panel-Modus === */
+  @media (max-width: 768px) {
+    body { overflow: hidden; }
+    header { padding: 9px 12px; gap: 10px; }
+    .logo { font-size: 16px; }
+    .search-wrap { max-width: none; }
+    .badge { font-size: 10px; padding: 2px 7px; }
+    .main { position: relative; overflow: hidden; }
+    .sidebar, .cmd-list, .detail {
+      position: absolute; inset: 0; width: 100%;
+      display: none; border-right: none; overflow-y: auto;
+    }
+    .sidebar.panel-active, .cmd-list.panel-active, .detail.panel-active { display: block; }
+    .detail { padding: 14px 13px; }
+    .detail-cmd { font-size: 24px; }
+    .detail-desc { font-size: 14px; }
+    .option-row { flex-wrap: wrap; gap: 4px; }
+    .option-flag { min-width: unset; font-size: 12px; }
+    .option-desc { font-size: 12px; }
+    .example-code { font-size: 12px; padding: 10px 12px; }
+    .syntax-box { font-size: 13px; padding: 10px 13px; }
+    .welcome .big { font-size: 48px; }
+    .welcome h2 { font-size: 18px; }
+    .mobile-nav { display: flex !important; }
+  }
+
+  /* === Extra-klein (≤420px) === */
+  @media (max-width: 420px) {
+    .logo .logo-text { display: none; }
+    .badge { display: none; }
+    .search-wrap input { font-size: 13px; }
+  }
 </style>
 </head>
 <body>
@@ -110,6 +157,11 @@
       <p>Wähle links eine Kategorie, dann klicke auf einen Befehl für eine ausführliche Erklärung mit Beispielen.</p>
     </div>
   </div>
+</div>
+<div class="mobile-nav" id="mobileNav">
+  <button class="mobile-nav-btn active" id="mnavCat" onclick="showMobilePanel('sidebar')"><span class="nav-icon">📂</span><span>Kategorien</span></button>
+  <button class="mobile-nav-btn" id="mnavCmd" onclick="showMobilePanel('cmdList')"><span class="nav-icon">📋</span><span>Befehle</span></button>
+  <button class="mobile-nav-btn" id="mnavDet" onclick="showMobilePanel('detail')"><span class="nav-icon">📖</span><span>Detail</span></button>
 </div>
 <script>
 const data = {
@@ -345,7 +397,7 @@ function renderSidebar() {
     const el = document.createElement('div');
     el.className = 'cat-item' + (currentCategory === name ? ' active' : '');
     el.innerHTML = `<span class="cat-icon">${cat.icon}</span>${name}<span class="cat-count">${cat.commands.length}</span>`;
-    el.onclick = () => { currentCategory = name; currentCommand = null; searchQuery = ''; document.getElementById('searchInput').value = ''; showWelcome(); render(); };
+    el.onclick = () => { currentCategory = name; currentCommand = null; searchQuery = ''; document.getElementById('searchInput').value = ''; showWelcome(); render(); showMobilePanel('cmdList'); };
     sb.appendChild(el);
   });
 }
@@ -376,7 +428,7 @@ function renderCmdList() {
     const el = document.createElement('div');
     el.className = 'cmd-item' + (currentCommand === cmd.name ? ' active' : '');
     el.innerHTML = `<div class="cmd-name">${cmd.name}</div><div class="cmd-short">${cmd.short}</div>`;
-    el.onclick = () => { currentCommand = cmd.name; currentCategory = cmd._cat; renderDetail(cmd); renderCmdList(); renderSidebar(); };
+    el.onclick = () => { currentCommand = cmd.name; currentCategory = cmd._cat; renderDetail(cmd); renderCmdList(); renderSidebar(); showMobilePanel('detail'); };
     list.appendChild(el);
   });
 }
@@ -420,7 +472,25 @@ document.getElementById('searchInput').addEventListener('input', e => {
 });
 
 function render() { renderSidebar(); renderCmdList(); }
+
+function showMobilePanel(id) {
+  if (window.innerWidth > 768) return;
+  ['sidebar','cmdList','detail'].forEach(p => document.getElementById(p).classList.remove('panel-active'));
+  document.getElementById(id).classList.add('panel-active');
+  [['mnavCat','sidebar'],['mnavCmd','cmdList'],['mnavDet','detail']].forEach(([btn,panel]) =>
+    document.getElementById(btn).classList.toggle('active', panel === id));
+}
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) {
+    ['sidebar','cmdList','detail'].forEach(p => document.getElementById(p).classList.remove('panel-active'));
+  } else if (!['sidebar','cmdList','detail'].some(p => document.getElementById(p).classList.contains('panel-active'))) {
+    showMobilePanel('sidebar');
+  }
+});
+
 render();
+if (window.innerWidth <= 768) showMobilePanel('sidebar');
 </script>
 </body>
 </html>
