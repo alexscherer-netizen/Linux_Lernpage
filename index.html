@@ -44,6 +44,20 @@
   .cat-item.active { background: var(--active-bg); color: var(--accent2); border-left-color: var(--accent); font-weight: 700; }
   .cat-item .cat-icon { font-size: 15px; width: 20px; text-align: center; }
   .cat-count { margin-left: auto; background: #c8ddb0; color: #3a5a30; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+  .sidebar-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px 7px; border-bottom: 1px solid var(--border); gap: 6px; }
+  .sidebar-toolbar-title { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; color: var(--text-muted); text-transform: uppercase; }
+  .sort-btn { background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted); font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 10px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px; white-space: nowrap; }
+  .sort-btn:hover { background: var(--hover); color: var(--text); }
+  .sort-btn.active { background: var(--accent); color: #fff; border-color: var(--accent2); }
+  .group-header { display: flex; align-items: center; gap: 7px; padding: 6px 12px 5px; cursor: pointer; user-select: none; border-bottom: 1px solid var(--border); background: rgba(46,107,30,0.07); transition: background 0.15s; }
+  .group-header:hover { background: rgba(46,107,30,0.14); }
+  .group-icon { font-size: 13px; width: 16px; text-align: center; }
+  .group-name { font-size: 9px; font-weight: 800; letter-spacing: 1.2px; color: var(--accent2); text-transform: uppercase; flex: 1; }
+  .group-count { background: var(--border); color: var(--text-muted); font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 8px; }
+  .group-chevron { font-size: 8px; color: var(--text-muted); transition: transform 0.2s; display: inline-block; }
+  .group-chevron.collapsed { transform: rotate(-90deg); }
+  .group-body { overflow: hidden; transition: max-height 0.22s ease; }
+  .group-body.collapsed { max-height: 0 !important; }
   .cmd-list { width: 210px; background: #f8fbf4; border-right: 1px solid var(--border); overflow-y: auto; flex-shrink: 0; }
   .cmd-list::-webkit-scrollbar { width: 4px; }
   .cmd-list::-webkit-scrollbar-thumb { background: #b0cc90; border-radius: 4px; }
@@ -677,20 +691,96 @@ const data = {
 };
 
 let currentCategory = null, currentCommand = null, searchQuery = "";
+let collapsedGroups = new Set();
+let sortMode = 'default';
+const groups = [
+  { name:"Grundlagen",     icon:"📚", cats:["Navigation","Dateiverwaltung","Textbearbeitung","Berechtigungen","Benutzerverwaltung"] },
+  { name:"System",         icon:"⚙️", cats:["Prozesse","System-Info","Logs & Monitoring","Paketverwaltung","Disk-Verwaltung"] },
+  { name:"Shell & Tools",  icon:"💻", cats:["Variablen & Shell","Shell-Scripting","Komprimierung","Moderne CLI-Tools","Regex vertieft"] },
+  { name:"Netzwerk",       icon:"🌐", cats:["Netzwerk","Netzwerk-Diagnose","WireGuard VPN","DNS-Server","E-Mail-Server"] },
+  { name:"Sicherheit",     icon:"🔒", cats:["Sicherheit","SSH – Vertieft","Ethical Hacking"] },
+  { name:"Server & Dienste", icon:"🖥️", cats:["Server-Einrichtung","Monitoring","Backup & Recovery","NFS & Samba"] },
+  { name:"DevOps",         icon:"🚀", cats:["Git","tmux & screen","Ansible","Kubernetes / K3s"] },
+  { name:"Datenbanken",    icon:"🗄️", cats:["PostgreSQL","Redis"] },
+  { name:"Praxis",         icon:"🛠️", cats:["Praxis-Workflows"] },
+];
 let totalCommands = 0;
 Object.values(data).forEach(cat => totalCommands += cat.commands.length);
 document.getElementById('totalBadge').textContent = totalCommands + ' Befehle';
 
 function renderSidebar() {
   const sb = document.getElementById('sidebar');
-  sb.innerHTML = '<div class="cat-header">Kategorien</div>';
-  Object.entries(data).forEach(([name, cat]) => {
-    const el = document.createElement('div');
-    el.className = 'cat-item' + (currentCategory === name ? ' active' : '');
-    el.innerHTML = `<span class="cat-icon">${cat.icon}</span>${name}<span class="cat-count">${cat.commands.length}</span>`;
-    el.onclick = () => { currentCategory = name; currentCommand = null; searchQuery = ''; document.getElementById('searchInput').value = ''; showWelcome(); render(); showMobilePanel('cmdList'); };
-    sb.appendChild(el);
+  sb.innerHTML = `<div class="sidebar-toolbar"><span class="sidebar-toolbar-title">Kategorien</span><button class="sort-btn${sortMode==='az'?' active':''}" onclick="toggleSort()" title="Alphabetisch sortieren">A–Z</button></div>`;
+
+  let displayGroups;
+  if (sortMode === 'az') {
+    const allCats = Object.keys(data).sort((a,b) => a.localeCompare(b,'de'));
+    displayGroups = [{ name: null, icon: null, cats: allCats }];
+  } else {
+    displayGroups = groups;
+  }
+
+  displayGroups.forEach(group => {
+    const isGrouped = group.name !== null;
+    const isCollapsed = isGrouped && collapsedGroups.has(group.name);
+
+    if (isGrouped) {
+      const totalCmds = group.cats.reduce((sum, c) => sum + (data[c]?.commands.length || 0), 0);
+      const gh = document.createElement('div');
+      gh.className = 'group-header';
+      const chevronEl = document.createElement('span');
+      chevronEl.className = 'group-chevron' + (isCollapsed ? ' collapsed' : '');
+      chevronEl.textContent = '▼';
+      gh.innerHTML = `<span class="group-icon">${group.icon}</span><span class="group-name">${group.name}</span><span class="group-count">${totalCmds}</span>`;
+      gh.appendChild(chevronEl);
+
+      const body = document.createElement('div');
+      body.className = 'group-body' + (isCollapsed ? ' collapsed' : '');
+      if (!isCollapsed) body.style.maxHeight = (group.cats.length * 38) + 'px';
+
+      group.cats.forEach(name => {
+        if (!data[name]) return;
+        const cat = data[name];
+        const el = document.createElement('div');
+        el.className = 'cat-item' + (currentCategory === name ? ' active' : '');
+        el.innerHTML = `<span class="cat-icon">${cat.icon}</span>${name}<span class="cat-count">${cat.commands.length}</span>`;
+        el.onclick = () => { currentCategory = name; currentCommand = null; searchQuery = ''; document.getElementById('searchInput').value = ''; showWelcome(); render(); showMobilePanel('cmdList'); };
+        body.appendChild(el);
+      });
+
+      gh.onclick = () => {
+        if (collapsedGroups.has(group.name)) {
+          collapsedGroups.delete(group.name);
+          body.classList.remove('collapsed');
+          body.style.maxHeight = (group.cats.length * 38) + 'px';
+          chevronEl.classList.remove('collapsed');
+        } else {
+          collapsedGroups.add(group.name);
+          body.classList.add('collapsed');
+          chevronEl.classList.add('collapsed');
+        }
+      };
+
+      sb.appendChild(gh);
+      sb.appendChild(body);
+    } else {
+      // Flache A–Z Liste ohne Gruppen-Header
+      group.cats.forEach(name => {
+        if (!data[name]) return;
+        const cat = data[name];
+        const el = document.createElement('div');
+        el.className = 'cat-item' + (currentCategory === name ? ' active' : '');
+        el.innerHTML = `<span class="cat-icon">${cat.icon}</span>${name}<span class="cat-count">${cat.commands.length}</span>`;
+        el.onclick = () => { currentCategory = name; currentCommand = null; searchQuery = ''; document.getElementById('searchInput').value = ''; showWelcome(); render(); showMobilePanel('cmdList'); };
+        sb.appendChild(el);
+      });
+    }
   });
+}
+
+function toggleSort() {
+  sortMode = sortMode === 'default' ? 'az' : 'default';
+  renderSidebar();
 }
 
 function getFiltered() {
